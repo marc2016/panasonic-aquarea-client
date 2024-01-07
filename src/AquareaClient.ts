@@ -1,10 +1,14 @@
 import axios, { AxiosInstance } from 'axios'
 import * as https from 'https'
+import _ from 'lodash'
+import setCookie, { Cookie } from 'set-cookie-parser'
+import { Device } from './model/Device'
 
 export class AquareaClient {
   readonly baseUrl = 'https://aquarea-smart.panasonic.com'
   readonly urlPartLogin = '/remote/v1/api/auth/login'
   readonly urlPartDevices = '/remote/v1/api/devices'
+  readonly urlServiceContract = '/remote/contract'
 
   private axiosInstance: AxiosInstance
 
@@ -50,7 +54,7 @@ export class AquareaClient {
     }
   }
 
-  async getDevices(): Promise<void> {
+  async getDevices(): Promise<Device[] | null> {
     try {
       const response = await this.axiosInstance.get(this.urlPartDevices, {
         headers: {
@@ -59,11 +63,54 @@ export class AquareaClient {
       })
 
       if (response.status == 200) {
-        console.log(response.data)
+        const responseDevices = response.data.device
+        const devices: Device[] = []
+        for (const responseDevice of responseDevices) {
+          const device = new Device()
+          _.assign(device, responseDevice)
+          devices.push(device)
+        }
+        return devices
       }
     } catch (error) {
       console.log('ERROR!')
       console.log(error)
     }
+
+    return null
+  }
+
+  async getDeviceLongId(deviceId: string): Promise<string | null> {
+    try {
+      const response = await this.axiosInstance.post(
+        this.urlServiceContract,
+        {},
+        {
+          headers: {
+            cookie: this.cookies?.concat(`selectedGwid=${deviceId}`),
+          },
+        },
+      )
+
+      if (response.status == 200) {
+        if (response.headers['set-cookie']) {
+          var cookies = setCookie.parse(response.headers['set-cookie'], {
+            decodeValues: true, // default: true
+          })
+          var cookie = _.find(cookies, (c: Cookie) => {
+            return c.name == 'selectedDeviceId'
+          })
+          if (!cookie) return null
+          return cookie?.value
+        }
+
+        return null
+      }
+    } catch (error) {
+      console.log('ERROR!')
+      console.log(error)
+    }
+
+    return null
   }
 }
